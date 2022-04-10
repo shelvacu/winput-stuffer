@@ -1,4 +1,4 @@
-use win_input_stuffer::input::{
+use winput_stuffer::input::{
     Input,
     KeyboardInput,
     KeyboardInputEnum,

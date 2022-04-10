@@ -165,15 +165,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd6fbd9a79829dd1ad0cc20627bf1ed606756a7f77edff7b66b7064f9cb327c6"
 
 [[package]]
-name = "win-input-stuffer"
-version = "0.1.0"
-dependencies = [
- "bimap",
- "phf",
- "windows",
-]
-
-[[package]]
 name = "windows"
 version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -244,3 +235,12 @@ name = "windows_x86_64_msvc"
 version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a29bd61f32889c822c99a8fdf2e93378bd2fae4d7efd2693fab09fcaaf7eff4b"
+
+[[package]]
+name = "winput-stuffer"
+version = "0.1.0"
+dependencies = [
+ "bimap",
+ "phf",
+ "windows",
+]

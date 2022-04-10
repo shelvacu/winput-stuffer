@@ -1,4 +1,4 @@
-# win-input-stuffer
+# winput-stuffer
 
 Utilities for safely interfacing with the windows API to simulate keyboard/mouse inputs.
 

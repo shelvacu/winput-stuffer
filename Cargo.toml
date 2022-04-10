@@ -1,5 +1,5 @@
 [package]
-name = "win-input-stuffer"
+name = "winput-stuffer"
 version = "0.1.0"
 edition = "2021"
 
