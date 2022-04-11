@@ -176,11 +176,14 @@ impl From<KeyboardInput> for KeyboardInputSys {
         }
 
         match rusty.e {
-            KeyboardInputEnum::VirtualKeyCode(n) => {
-                if n.0 < 1 || n.0 > 254 {
+            KeyboardInputEnum::VirtualKeyCode{code, extended} => {
+                if code.0 < 1 || code.0 > 254 {
                     panic!("VirtualKeyCode outside acceptable range");
                 }
-                inner.wVk = n;
+                if extended {
+                    inner.dwFlags |= km_sys::KEYEVENTF_EXTENDEDKEY
+                }
+                inner.wVk = code;
             },
             KeyboardInputEnum::ScanCode{code, extended} => {
                 inner.wScan = code;
@@ -211,7 +214,7 @@ pub struct KeyboardInput {
 #[derive(Debug,Copy,Clone,PartialEq,Eq)]
 pub enum KeyboardInputEnum {
     /// Must be in the range 1..=254
-    VirtualKeyCode(VirtualKey),
+    VirtualKeyCode{code: VirtualKey, extended: bool},
     ScanCode{code: u16, extended: bool},
     /// That's right, you have to encode your text as UTF-16 and if it's got two code units you have to send 2 events.
     UnicodeCodeUnit(u16),

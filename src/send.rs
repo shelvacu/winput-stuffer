@@ -1,73 +1,157 @@
 ///! The goal of this module is to convert from `str` to `Input`s that should produce that string when put through SendInput
 
-use phf::phf_map;
+use std::io;
+use std::borrow::Cow;
 
-// SCANCODE_TO_KEY = {
-//     59: 'F1', 60: 'F2', 61: 'F3', 62: 'F4', 63: 'F5', 64: 'F6',
-//     65: 'F7', 66: 'F8', 67: 'F9', 68: 'F10', 87: 'F11', 88: 'F12',
-//     41: '`', 2: '1', 3: '2', 4: '3', 5: '4', 6: '5', 7: '6', 8: '7',
-//     9: '8', 10: '9', 11: '0', 12: '-', 13: '=', 16: 'q',
-//     17: 'w', 18: 'e', 19: 'r', 20: 't', 21: 'y', 22: 'u', 23: 'i',
-//     24: 'o', 25: 'p', 26: '[', 27: ']', 43: '\\',
-//     30: 'a', 31: 's', 32: 'd', 33: 'f', 34: 'g', 35: 'h', 36: 'j',
-//     37: 'k', 38: 'l', 39: ';', 40: '\'', 44: 'z', 45: 'x',
-//     46: 'c', 47: 'v', 48: 'b', 49: 'n', 50: 'm', 51: ',',
-//     52: '.', 53: '/', 57: 'space', 58: "BackSpace", 83: "Delete",
-//     80: "Down", 79: "End", 1: "Escape", 71: "Home", 82: "Insert",
-//     75: "Left", 73: "Page_Down", 81: "Page_Up", 28 : "Return",
-//     77: "Right", 15: "Tab", 72: "Up",
-// }
+use crate::layout::KeyboardLayout;
+use crate::input::{Input, KeyboardInput, KeyboardInputEnum};
 
-// static CHARS_TO_KEYCODES: phf::Map<char, u8> = phf_map! {
-//     '1' =>   2u8,
-//     '2' =>   3u8,
-//     '3' =>   4u8,
-//     '4' =>   5u8,
-//     '5' =>   6u8,
-//     '6' =>   7u8,
-//     '7' =>   8u8,
-//     '8' =>   9u8,
-//     '9' =>  10u8,
-//     '0' =>  11u8,
-//     '-' =>  12u8,
-//     '=' =>  13u8,
+// This is taken directly from https://github.com/openstenoproject/plover/blob/2ada7c71cd25a114e1439817a44206ff0da8b70e/plover/oslayer/winkeyboardcontrol.py#L52 warts and all
+static EXTENDED_KEYS:phf::Set<u8> = phf::phf_set! {
+    0xA2u8, // Control
+    0xA3u8,
+    0xA4u8, // Alt
+    0xA5u8,
+    0x2Du8, // Ins
+    0x2Eu8, // Del
+    0x21u8, // Home
+    0x22u8, // End
+    0x24u8, // Pg Up
+    0x23u8, // Pg Down
+    0x25u8, // Arrows
+    0x26u8,
+    0x27u8,
+    0x28u8,
+    0x90u8, // NumLock
+    0x03u8, // Break
+    0x2Cu8, // PrintScreen
+    0x6Fu8, // Divide
+};
 
-//     'q' =>  16u8,
-//     'w' =>  17u8,
-//     'e' =>  18u8,
-//     'r' =>  19u8,
-//     't' =>  20u8,
-//     'y' =>  21u8,
-//     'u' =>  22u8,
-//     'i' =>  23u8,
-//     'o' =>  24u8,
-//     'p' =>  25u8,
-//     '[' =>  26u8,
-//     ']' =>  27u8,
+fn key_event(
+    keycode: u8,
+    key_down: bool,
+    msg: Option<super::window_message::WindowMessage>,
+) -> KeyboardInput {
+    KeyboardInput{
+        e: KeyboardInputEnum::VirtualKeyCode{
+            code: crate::input::VirtualKey(keycode.into()),
+            extended: EXTENDED_KEYS.contains(&keycode),
+        },
+        key_up: !key_down,
+        msg,
+        time: None,
+    }
+}
 
-//     'a' =>  30u8,
-//     's' =>  31u8,
-//     'd' =>  32u8,
-//     'f' =>  33u8,
-//     'g' =>  34u8,
-//     'h' =>  35u8,
-//     'j' =>  36u8,
-//     'k' =>  37u8,
-//     'l' =>  38u8,
-//     ';' =>  39u8,
-//     '\''=>  40u8,
-//     '`' =>  41u8,
+struct KeyPressIter {
+    keycode_list: Vec<u8>,
+    i: usize,
+    second_iter: bool,
+    msg: Option<super::window_message::WindowMessage>,
+}
 
-//     '\\'=>  43u8,
-//     'z' =>  44u8,
-//     'x' =>  45u8,
-//     'c' =>  46u8,
-//     'v' =>  47u8,
-//     'b' =>  48u8,
-//     'n' =>  49u8,
-//     'm' =>  50u8,
-//     ',' =>  51u8,
-//     '.' =>  52u8,
-//     '/' =>  53u8,
-// };
+impl Iterator for KeyPressIter {
+    type Item = Input;
 
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i >= self.keycode_list.len() {
+            if self.second_iter {
+                return None;
+            } else {
+                self.i = 0;
+                self.second_iter = true;
+            }
+        }
+
+        let keycode = self.keycode_list[self.i];
+        let ki = key_event(keycode, !self.second_iter, self.msg.clone());
+
+        self.i += 1;
+        Some(Input::from_keyboard(&ki.into()))
+    }
+}
+
+fn key_press(
+    c:char,
+    layout:&KeyboardLayout,
+    msg: Option<super::window_message::WindowMessage>,
+) -> impl Iterator<Item = Input> {
+    let (vk, ss) = layout.char_to_vk_ss()[&c];
+    let mut keycode_list = vec![];
+    keycode_list.extend(&layout.ss_to_vks()[&ss]);
+    keycode_list.push(vk);
+
+    KeyPressIter {
+        keycode_list,
+        i: 0,
+        second_iter: false,
+        msg,
+    }
+}
+
+fn key_unicode(
+    c:char,
+    layout:&KeyboardLayout,
+    msg: Option<super::window_message::WindowMessage>,
+) -> impl Iterator<Item = Input> {
+    let s:String = c.into();
+    let mut res = vec![];
+    for key_up in [false, true] {
+        for wc in s.encode_utf16() {
+            let k = KeyboardInput{
+                e:KeyboardInputEnum::UnicodeCodeUnit(wc),
+                key_up,
+                msg: msg.clone(),
+                time: None,
+            };
+            res.push(Input::from_keyboard(&k.into()));
+        }
+    }
+    res.into_iter()
+}
+
+pub fn send_text_with_msg(
+    text_: impl AsRef<str>,
+    msg: Option<super::window_message::WindowMessage>,
+) -> io::Result<()> {
+    let text = text_.as_ref();
+    let layout = KeyboardLayout::new(crate::layout::current_layout_id(), false);
+
+    let mut inputs = Vec::with_capacity(text.len());
+    for c in text.chars() {
+        if layout.char_to_vk_ss().contains_key(&c) {
+            inputs.extend(key_press(c, &layout, msg.clone()));
+        } else {
+            inputs.extend(key_unicode(c, &layout, msg.clone()));
+        }
+    }
+    dbg!(inputs.len());
+    dbg!(crate::input::send_input(&inputs)).map(|_| ())
+}
+
+pub fn send_text(
+    text: impl AsRef<str>
+) -> io::Result<()> {
+    send_text_with_msg(text, None)
+}
+
+pub fn send_key(
+    key: &str,
+    key_down: bool,
+) -> io::Result<()> {
+    let layout = KeyboardLayout::new(crate::layout::current_layout_id(), false);
+    let inputs = vec![input_for_key(key, key_down, &layout)];
+    dbg!(crate::input::send_input(&inputs)).map(|_| ())
+}
+
+pub fn input_for_key<'a>(
+    key: &'a str,
+    key_down: bool,
+    layout: &KeyboardLayout,
+) -> Input {
+    let key_borrow_garbage:Cow<'a, str> = key.into();
+    let vk = layout.keyname_to_vk().get(&key_borrow_garbage).unwrap();
+    let ki = key_event(*vk, key_down, None);
+    Input::from_keyboard(&ki.into())
+}
