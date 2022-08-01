@@ -10,7 +10,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse as km_sys;
 
 pub use windows::Win32::UI::TextServices::HKL;
 
-mod maps;
+pub mod maps;
 use maps::*;
 
 const SHIFT_STATE_SHIFT:u8 = 0x01;
@@ -92,6 +92,10 @@ impl KeyboardLayout {
 
     pub fn ss_to_vks(&self) -> &HashMap<u8, std::vec::Vec<u8>> {
         &self.ss_to_vks
+    }
+
+    pub fn current() -> Self {
+        Self::new(current_layout_id(), false)
     }
 
     pub fn new(layout_id: HKL, debug: bool) -> Self {
@@ -179,7 +183,7 @@ impl KeyboardLayout {
                 let (maybe_c, dead_key) = to_unichr(vk, sc, ss);
                 if debug {
                     if let Some(c) = maybe_c.as_ref() {
-                        println!(
+                        eprintln!(
                             "{}{} -> {:?} [{:?}] {}",
                             shift_state_str(ss),
                             vk_to_str(vk),

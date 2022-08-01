@@ -28,7 +28,7 @@ static EXTENDED_KEYS:phf::Set<u8> = phf::phf_set! {
     0x6Fu8, // Divide
 };
 
-fn key_event(
+pub fn key_event(
     keycode: u8,
     key_down: bool,
     msg: Option<super::window_message::WindowMessage>,
@@ -92,7 +92,6 @@ fn key_press(
 
 fn key_unicode(
     c:char,
-    layout:&KeyboardLayout,
     msg: Option<super::window_message::WindowMessage>,
 ) -> impl Iterator<Item = Input> {
     let s:String = c.into();
@@ -111,38 +110,59 @@ fn key_unicode(
     res.into_iter()
 }
 
-pub fn send_text_with_msg(
-    text_: impl AsRef<str>,
+pub fn send_text_with_msg_layout(
+    text: &str,
     msg: Option<super::window_message::WindowMessage>,
+    layout: &KeyboardLayout
 ) -> io::Result<()> {
-    let text = text_.as_ref();
-    let layout = KeyboardLayout::new(crate::layout::current_layout_id(), false);
-
     let mut inputs = Vec::with_capacity(text.len());
     for c in text.chars() {
         if layout.char_to_vk_ss().contains_key(&c) {
             inputs.extend(key_press(c, &layout, msg.clone()));
         } else {
-            inputs.extend(key_unicode(c, &layout, msg.clone()));
+            inputs.extend(key_unicode(c, msg.clone()));
         }
     }
     dbg!(inputs.len());
     dbg!(crate::input::send_input(&inputs)).map(|_| ())
 }
 
+pub fn inputs_for_text(
+    text: &str,
+    layout: &KeyboardLayout,
+    out: &mut Vec<Input>
+) {
+    for c in text.chars() {
+        if layout.char_to_vk_ss().contains_key(&c) {
+            out.extend(key_press(c, &layout, None));
+        } else {
+            out.extend(key_unicode(c, None));
+        }
+    }
+}
+
 pub fn send_text(
-    text: impl AsRef<str>
+    text: &str,
 ) -> io::Result<()> {
-    send_text_with_msg(text, None)
+    let layout = KeyboardLayout::current();
+    send_text_with_msg_layout(text, None, &layout)
 }
 
 pub fn send_key(
     key: &str,
     key_down: bool,
 ) -> io::Result<()> {
-    let layout = KeyboardLayout::new(crate::layout::current_layout_id(), false);
-    let inputs = vec![input_for_key(key, key_down, &layout)];
-    dbg!(crate::input::send_input(&inputs)).map(|_| ())
+    let layout = KeyboardLayout::current();
+    send_key_layout(key, key_down, &layout)
+}
+
+pub fn send_key_layout(
+    key: &str,
+    key_down: bool,
+    layout: &KeyboardLayout,
+) -> io::Result<()> {
+    let inputs = vec![input_for_key(key, key_down, layout)];
+    dbg!(crate::input::send_input(&inputs)).map(|count| assert_eq!(inputs.len() as u32, count))
 }
 
 pub fn input_for_key<'a>(

@@ -61,14 +61,18 @@ impl From<MouseInput> for MouseInputSys {
                 inner.dwFlags |= km_sys::MOUSEEVENTF_ABSOLUTE;
                 if !coalesce {
                     inner.dwFlags |= km_sys::MOUSEEVENTF_MOVE_NOCOALESCE;
+                } else {
+                    inner.dwFlags |= km_sys::MOUSEEVENTF_MOVE;
                 }
                 inner.dx = x.into();
                 inner.dy = y.into();
             },
             MouseInputEnum::Move{m: MouseMovement::AbsoluteVirtualDesktop{x, y}, coalesce} => {
-                inner.dwFlags |= km_sys::MOUSEEVENTF_ABSOLUTE & km_sys::MOUSEEVENTF_VIRTUALDESK;
+                inner.dwFlags |= km_sys::MOUSEEVENTF_ABSOLUTE | km_sys::MOUSEEVENTF_VIRTUALDESK;
                 if !coalesce {
                     inner.dwFlags |= km_sys::MOUSEEVENTF_MOVE_NOCOALESCE;
+                } else {
+                    inner.dwFlags |= km_sys::MOUSEEVENTF_MOVE;
                 }
                 inner.dx = x.into();
                 inner.dy = y.into();
@@ -76,6 +80,8 @@ impl From<MouseInput> for MouseInputSys {
             MouseInputEnum::Move{m: MouseMovement::Relative{dx, dy}, coalesce} => {
                 if !coalesce {
                     inner.dwFlags |= km_sys::MOUSEEVENTF_MOVE_NOCOALESCE;
+                } else {
+                    inner.dwFlags |= km_sys::MOUSEEVENTF_MOVE;
                 }
                 inner.dx = dx;
                 inner.dy = dy;
@@ -345,6 +351,7 @@ impl Input {
 /// Panics if the length of the input slice >= i32::MAX
 pub fn send_input(inputs: &[Input]) -> io::Result<u32> {
     if inputs.len() >= i32::MAX as usize { panic!() }
+    if inputs.len() == 0 { return Ok(0) }
     let res = unsafe {
         km_sys::SendInput(
             std::mem::transmute(inputs),
